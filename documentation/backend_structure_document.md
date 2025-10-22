@@ -1,179 +1,195 @@
 # Backend Structure Document
 
-This document outlines the backend architecture, hosting, and infrastructure for the **codeguide-starter** project. It uses plain language so anyone can understand how the backend is set up and how it supports the application.
-
 ## 1. Backend Architecture
 
-- **Framework and Design Pattern**
-  - We use **Next.js API Routes** to handle all server-side logic. These routes live alongside the frontend code in the same repository, making development and deployment simpler.
-  - The backend follows a **layered pattern**:
-    1. **API Layer**: Receives requests (login, registration, data fetch).  
-    2. **Service Layer**: Contains the core business logic (user validation, password hashing).  
-    3. **Data Access Layer**: Talks to the database via a simple ORM (e.g., Prisma or TypeORM).
+We’ve organized the backend into clear, modular parts to keep things easy to understand, extend, and scale:
 
-- **Scalability**
-  - Stateless API routes can scale horizontally—new instances can spin up on demand.  
-  - We can add caching or a message queue (e.g., Redis or RabbitMQ) without changing the core code.
+- **Next.js API Routes**
+  - Handles all HTTP requests (sign-up, tenant creation, AI generation, payments, etc.)
+  - Lives alongside the frontend in the same codebase, simplifying deployment and sharing code (e.g., types, utilities)
+- **Service Layer (`/lib/` folder)**
+  - Encapsulates business logic for:
+    - Authentication (Better-Auth)
+    - AI content generation (LLMProvider adapters)
+    - AWS interactions (S3 uploads, Route 53 DNS provisioning)
+    - Payments (Flutterwave SDK integration)
+- **Database Layer**
+  - Uses a type-safe ORM (currently Drizzle, with an easy path to migrate to TypeORM)
+  - Keeps SQL definitions, migrations, and queries in one place, reducing errors and improving maintainability
 
-- **Maintainability**
-  - Code for each feature is grouped by route (authentication, dashboard).  
-  - A service layer separates complex logic from request handling.
-
-- **Performance**
-  - Lightweight Node.js handlers keep response times low.  
-  - Future use of database connection pooling and Redis for caching repeated queries.
+How this supports your goals:
+- **Scalability**: Each API route is stateless, so you can scale horizontally (add more instances) without sharing in-memory data.
+- **Maintainability**: Clear folder structure (`app/`, `lib/`, `db/`) and separation of concerns mean new developers can find and fix code quickly.
+- **Performance**: Serverless functions (e.g., on Vercel) spin up on demand and auto-scale based on traffic; heavy work (AI calls, file uploads) happens asynchronously or in background functions.
 
 ## 2. Database Management
 
-- **Database Choice**
-  - We recommend **PostgreSQL** for structured data and reliable transactions.  
-  - In-memory caching can be added later with **Redis** for session tokens or frequently read data.
-
-- **Data Storage and Access**
-  - Use an ORM like **Prisma** or **TypeORM** to map JavaScript/TypeScript objects to database tables.
-  - Connection pooling ensures efficient use of database connections under load.
-  - Migrations track schema changes over time, keeping development, staging, and production in sync.
-
-- **Data Practices**
-  - Passwords are never stored in plain text—they are salted and hashed with **bcrypt** before saving.
-  - All outgoing data is typed and validated to prevent malformed records.
+- **Technology**:
+  - Primary: PostgreSQL (relational SQL database)
+  - ORM: Drizzle ORM (type-safe, easy migrations). Optional migration to TypeORM if you prefer its ecosystem.
+- **Data Organization**:
+  - **Users** table tracks every registered account
+  - **Tenants** table links each tenant to one user (multi-tenancy core)
+  - **Websites** table (tenant_websites) stores references to generated site assets in S3
+  - **Subscriptions** table records billing status and payment details
+- **Practices**:
+  - **Migrations**: Keep all schema changes in versioned migration files to ensure consistency across environments
+  - **Indexes**: Add indexes on foreign keys (`user_id`, `tenant_id`) and unique columns (`email`, `subdomain`) for fast lookups
+  - **Connection Pooling**: Use a pool to reuse database connections and reduce overhead under load
 
 ## 3. Database Schema
 
-### Human-Readable Format
+### Human-Readable Overview
 
-- **Users**
-  - **id**: Unique identifier  
-  - **email**: User’s email address (unique)  
-  - **password_hash**: Securely hashed password  
-  - **created_at**: Account creation timestamp
+- **users**: Stores user login info
+- **tenants**: Represents a tenant account (one per user) with a unique subdomain
+- **tenant_websites**: Tracks each tenant’s generated site files in S3
+- **subscriptions**: Records the payment plan and status for each tenant
 
-- **Sessions**
-  - **id**: Unique session record  
-  - **user_id**: Links to a user  
-  - **token**: Random string for authentication  
-  - **expires_at**: When the token stops working  
-  - **created_at**: When the session was created
+### PostgreSQL Schema (SQL)
 
-- **DashboardItems** *(optional for dynamic data)*
-  - **id**: Unique record  
-  - **title**: Item title  
-  - **content**: Item details  
-  - **created_at**: When the item was added
-
-### SQL Schema (PostgreSQL)
 ```sql
 -- Users table
 CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Sessions table
-CREATE TABLE sessions (
-  id SERIAL PRIMARY KEY,
-  user_id INT REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(255) UNIQUE NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- Tenants table
+CREATE TABLE tenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  subdomain TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending, active, suspended
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Dashboard items table
-CREATE TABLE dashboard_items (
-  id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  content TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- Tenant Websites table
+CREATE TABLE tenant_websites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  s3_key TEXT NOT NULL, -- path to index.html or zipped site
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-```  
+
+-- Subscriptions table
+CREATE TABLE subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL, -- e.g., 'free', 'pro', 'enterprise'
+  provider TEXT NOT NULL, -- e.g., 'flutterwave'
+  status TEXT NOT NULL DEFAULT 'pending', -- pending, active, cancelled
+  started_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
 
 ## 4. API Design and Endpoints
 
-- **Approach**: We follow a **RESTful** style, grouping related endpoints under `/api` directories.
+We use **RESTful** API routes in Next.js under `/app/api/`:
 
-- **Key Endpoints**
-  - `POST /api/auth/register`  
-    • Accepts `{ email, password }`  
-    • Creates a new user and issues a session token  
-  - `POST /api/auth/login`  
-    • Accepts `{ email, password }`  
-    • Verifies credentials and returns a session token  
-  - `POST /api/auth/logout`  
-    • Invalidates the session token on the server  
-  - `GET /api/dashboard/data`  
-    • Requires a valid session  
-    • Returns user-specific data or dashboard items  
+- **Authentication**
+  - `POST /api/auth/signup` ➔ register a new user
+  - `POST /api/auth/signin` ➔ log in and receive a session token
+  - Protected routes check the token via Better-Auth middleware
 
-- **Communication**
-  - Frontend sends JSON requests; backend replies with JSON and appropriate HTTP status codes.  
-  - Protected routes check for a valid session token (in cookies or Authorization header).
+- **Tenants**
+  - `POST /api/tenants` ➔ create a tenant record, trigger Route 53 DNS setup for `subdomain.yourdomain.com`
+  - `GET /api/tenants` ➔ list all tenants for the logged-in user
+
+- **AI Website Generation**
+  - `POST /api/tenants/[tenantId]/generate-website` ➔ accept onboarding data, call LLMProvider, store generated site in S3, create or update `tenant_websites` record
+
+- **Website Editing**
+  - `GET /api/tenants/[tenantId]/website` ➔ fetch the current site content (from S3)
+  - `PUT /api/tenants/[tenantId]/website` ➔ upload updated site content to S3
+
+- **Payments**
+  - `POST /api/payments/webhook` ➔ receive and verify Flutterwave callbacks, update subscription status
 
 ## 5. Hosting Solutions
 
-- **Cloud Provider**:  
-  - **Vercel** (recommended) offers seamless Next.js deployments, auto-scaling, and built-in CDN.  
-  - Alternatively, **Netlify** or any Node.js-capable host will work.
+- **Frontend & API**: Vercel (optimized for Next.js, built-in CDN, zero-config deployments)
+- **Object Storage**: AWS S3 (stores generated HTML/CSS/JS securely)
+- **DNS**: AWS Route 53 (automates subdomain provisioning via AWS SDK)
 
-- **Benefits**
-  - **Reliability**: Global servers and failover across regions.  
-  - **Scalability**: Auto-scale serverless functions based on traffic.  
-  - **Cost-Effectiveness**: Pay-per-use model means low cost for small projects.
+Why these choices:
+- **Reliability**: Vercel and AWS are battle-tested, globally distributed services
+- **Scalability**: Both auto-scale under load
+- **Cost-Effectiveness**: Pay-as-you-go pricing keeps costs low in early stages
 
 ## 6. Infrastructure Components
 
-- **Load Balancer**
-  - Provided by the hosting platform—distributes API requests across function instances.
-
-- **CDN (Content Delivery Network)**
-  - Vercel’s global edge network caches static assets (CSS, JS, images) for faster page loads.
+- **Load Balancer & CDN**
+  - Vercel’s edge network distributes static assets worldwide
+  - API routes also live on the edge, reducing latency
 
 - **Caching**
-  - **Redis** (optional) for session storage or caching dashboard queries to reduce database load.
+  - Next.js ISR (Incremental Static Regeneration) for public pages
+  - In-memory caching (e.g., using a Redis add-on) can be added for heavy data endpoints
 
-- **Object Storage**
-  - For file uploads or backups, integrate with AWS S3 or similar services.
+- **Containerization (Local Dev)**
+  - Docker + docker-compose spins up Next.js and PostgreSQL locally with one command
 
-- **Message Queue**
-  - In future, use **RabbitMQ** or **Kafka** for background tasks (e.g., email notifications).
+- **Background Jobs (Optional)**
+  - Use serverless functions or a queue (e.g., AWS SQS) for long-running tasks like mass site generation
 
 ## 7. Security Measures
 
 - **Authentication & Authorization**
-  - Passwords hashed with **bcrypt** and salted.  
-  - Session tokens stored in secure, HttpOnly cookies or Authorization headers.  
-  - Protected endpoints verify tokens before proceeding.
+  - Better-Auth secures routes; users can only access their own tenants
+  - Role checks (owner vs. editor) can be added to protect sensitive endpoints
 
 - **Data Encryption**
-  - **HTTPS/TLS** encrypts data in transit.  
-  - Database connections use SSL to encrypt data between the app and the database.
+  - All traffic over HTTPS
+  - S3 buckets set to encrypt objects at rest
 
-- **Input Validation**
-  - Every incoming request is validated (e.g., valid email format, password length) to prevent SQL injection or other attacks.
+- **Secrets Management**
+  - Environment variables (e.g., AWS keys, Flutterwave secret) stored in Vercel’s config or a secrets manager
 
-- **Web Security Best Practices**
-  - Enable **CORS** policies to limit allowed origins.  
-  - Use **CSRF tokens** or same-site cookies to prevent cross-site requests.  
-  - Set secure headers with **Helmet** or a similar middleware.
+- **Webhook Verification**
+  - Verify Flutterwave payloads using their signature header
+
+- **Database Security**
+  - Least-privilege user for migrations and runtime
+  - Network rules restricting direct DB access to the API layer
 
 ## 8. Monitoring and Maintenance
 
-- **Performance Monitoring**
-  - Integrate **Sentry** or **LogRocket** for real-time crash reporting and performance tracing.  
-  - Use Vercel’s built-in analytics to track request latencies and error rates.
+- **Logging & Error Tracking**
+  - Integrate Sentry or Datadog to capture runtime errors, stack traces, and performance metrics
+  - Vercel Analytics for high-level traffic and response insights
 
-- **Logging**
-  - Structured logs (JSON) for all API requests and errors, shipped to a log management service like **Datadog** or **Logflare**.
+- **Health Checks & Alerts**
+  - Simple `/healthz` endpoint returning status
+  - Configure alerting (e.g., Slack, email) when errors exceed a threshold
 
-- **Health Checks**
-  - Define a `/health` endpoint that returns a 200 status if the service is up and the database is reachable.
+- **Database Backups & Migrations**
+  - Scheduled automated backups of the PostgreSQL instance
+  - Versioned migration scripts (Drizzle or TypeORM) run at deploy time
 
-- **Maintenance Strategies**
-  - Automated migrations run on deploy to keep the database schema up to date.  
-  - Scheduled dependency audits and security scans (e.g., `npm audit`).
-  - Regular backups of the database (daily or weekly depending on usage).
+- **CI/CD**
+  - GitHub Actions or Vercel’s built-in pipeline automatically runs tests, linting, and deployments on each push
 
 ## 9. Conclusion and Overall Backend Summary
 
-The backend for **codeguide-starter** is built on Next.js API Routes and Node.js, paired with PostgreSQL for data and optional Redis for caching. It follows a clear layered architecture that keeps code easy to maintain and extend. With RESTful endpoints for authentication and data, secure practices like password hashing and HTTPS, and hosting on Vercel for scalability and global performance, this setup meets the project’s goals for a fast, secure, and developer-friendly foundation. Future enhancements—such as background job queues, advanced monitoring, or richer data models—can be added without disrupting the core structure.
+This backend is designed to be:
+
+- **Modular**: Clearly separated areas for API routes, business logic, and data management
+- **Scalable**: Stateless routes, auto-scaling hosting, and managed cloud services
+- **Secure**: Industry-standard auth, encryption, and secrets handling
+- **Maintainable**: Type-safe ORM, migration system, and centralized service modules
+
+Unique strengths:
+- **AI-Driven Multi-Tenant Focus**: Built-in hooks for LLM providers, automated DNS, and S3 workflows
+- **Full-Stack in One Repo**: Shared code between frontend and backend speeds up development
+
+With this setup, you have a rock-solid foundation to build, test, and run your AI-powered multi-tenant website platform without surprises or hidden complexity.

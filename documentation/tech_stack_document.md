@@ -1,90 +1,152 @@
 # Tech Stack Document
 
-This document explains the key technologies chosen for the **codeguide-starter** project. It’s written in everyday language so anyone—technical or not—can understand why each tool was picked and how it supports the application.
+This document explains, in everyday language, the technology choices for the AI-powered multi-tenant website platform. It covers why each technology was chosen and how it all fits together.
 
-## 1. Frontend Technologies
-The frontend is everything the user sees and interacts with. For this project, we’ve used:
+## Frontend Technologies
 
-- **Next.js (App Router)**
-  - A React framework that makes page routing, server-side rendering, and API routes very simple.
-  - Enhances user experience by pre-rendering pages on the server or at build time, leading to faster initial load.
-- **React 18**
-  - The underlying library for building user interfaces with reusable components.
-  - Provides a smooth, interactive experience thanks to its virtual DOM and modern hooks.
-- **TypeScript**
-  - A superset of JavaScript that adds types (labels for data).
-  - Helps catch errors early during development and makes the code easier to maintain.
-- **CSS (globals.css & theme.css)**
-  - **globals.css** applies base styles (fonts, colors, resets) across the entire app.
-  - **dashboard/theme.css** defines the look and feel specific to the dashboard area.
-  - This separation keeps styles organized and avoids accidental style conflicts.
+We build the user interface—the part people see and interact with in their web browser—using:  
 
-By combining these tools, we have a clear structure (Next.js folders for pages and layouts), safer code (TypeScript), and flexible styling with vanilla CSS.
+- **Next.js (App Router)**  
+  A React-based framework that handles routing, server-side rendering, and static site generation out of the box. It makes pages load quickly and gives us a clear way to organize public and protected routes.  
 
-## 2. Backend Technologies
-The backend handles data, user accounts, and the logic behind the scenes. Our choices here are:
+- **React**  
+  The core library for building interactive UI components. It lets us break the interface into small, reusable pieces.
 
-- **Next.js API Routes**
-  - Allows us to write server-side code (`route.ts` files) alongside our frontend in the same project.
-  - Runs on Node.js, so we can handle requests like sign-up, sign-in, and data fetching in one place.
-- **Node.js Runtime**
-  - The JavaScript environment on the server that executes our API routes.
-- **bcrypt** (npm package)
-  - A library for hashing passwords securely before storing them.
-  - Ensures that even if someone got access to our data, raw passwords aren’t visible.
-- **(Optional) NextAuth.js or JWT**
-  - While this starter kit shows a custom authentication flow, it can easily integrate services like NextAuth.js for email-based login or JWT (JSON Web Tokens) for stateless sessions.
+- **TypeScript**  
+  A strict version of JavaScript that catches errors early. It helps keep the code consistent and maintainable.
 
-These components work together to receive user credentials, verify or store them securely, manage sessions or tokens, and deliver protected data back to the frontend.
+- **shadcn/ui**  
+  A collection of pre-built, customizable React components. We use these for a polished, consistent look—especially in our multi-step `BusinessSetupWizard` and dashboard.
 
-## 3. Infrastructure and Deployment
-Infrastructure covers where and how we host the app, as well as how changes get delivered:
+- **Tailwind CSS**  
+  A utility-first styling framework. It speeds up design by letting us apply visual styles directly in our markup without writing custom CSS files.
 
-- **Git & GitHub**
-  - Version control system (Git) and remote hosting (GitHub) keep track of all code changes and allow team collaboration.
-- **Vercel (or Netlify)**
-  - A popular hosting service optimized for Next.js, with one-click deployments and global content delivery.
-  - Automatically rebuilds and deploys the site whenever code is pushed to the main branch.
-- **GitHub Actions (CI/CD)**
-  - Automates tasks like linting (ESLint), formatting (Prettier), and running any tests you add.
-  - Ensures that only clean, tested code goes live.
+- **react-hook-form**  
+  A lightweight way to manage form state and validation. It powers our onboarding wizard, making multi-step forms smooth and easy to build.
 
-Together, these tools provide a reliable, scalable setup where every code change is tested and deployed quickly, with minimal manual work.
+- **Dynamic Theming**  
+  Built-in support for light and dark modes. Users can toggle themes instantly, improving accessibility and comfort.
 
-## 4. Third-Party Integrations
-While this starter kit is minimal by design, it already includes or can easily add:
+How it improves user experience:
+- Fast loading and smooth navigation thanks to Next.js.  
+- Consistent, modern design with shadcn/ui and Tailwind.  
+- Clear, bug-resistant code aided by TypeScript.  
+- Responsive, validated forms with react-hook-form.  
+- Polished look-and-feel across light/dark themes.
 
-- **bcrypt**
-  - For secure password hashing (included as an npm dependency).
-- **NextAuth.js** (optional)
-  - A full-featured authentication library supporting email/password, OAuth, and more.
-- **Sentry or LogRocket** (optional)
-  - For real-time error tracking and performance monitoring in production.
+## Backend Technologies
 
-These integrations help extend the app’s capabilities without building every feature from scratch.
+These power the application’s logic, data storage, and security behind the scenes:
 
-## 5. Security and Performance Considerations
-We’ve baked in several measures to keep users safe and the app running smoothly:
+- **Next.js API Routes**  
+  Built-in serverless endpoints (e.g., `/api/tenants`, `/api/payments/webhook`). They handle requests like creating tenants, generating websites, and processing payment callbacks.
 
-Security:
-- Passwords are never stored in plain text—bcrypt hashes them with a random salt.
-- API routes can implement CSRF protection and input validation to block malicious requests.
-- Session tokens or cookies are marked secure and HttpOnly to prevent theft via JavaScript.
+- **better-auth**  
+  A simple authentication library integrated into Next.js. It secures pages and APIs, manages sign-up/sign-in flows, and protects the dashboard.
 
-Performance:
-- Server-side rendering (SSR) and static site generation (SSG) in Next.js deliver pages faster.
-- Code splitting and lazy-loaded components ensure users only download what they need.
-- Global CSS and theme files are small and cached by the browser for quick repeat visits.
+- **PostgreSQL**  
+  A reliable, open-source relational database. It stores users, tenants, websites, subscriptions, and more.
 
-These strategies work together to give users a fast, secure experience every time.
+- **Drizzle ORM**  
+  A type-safe way to work with the database directly in TypeScript. It ensures our queries match the schema and reduces runtime errors.  
+  *(Optional: Migrate to TypeORM if preferred for its migration tooling.)*
 
-## 6. Conclusion and Overall Tech Stack Summary
-In building **codeguide-starter**, we chose technologies that:
+- **TypeScript**  
+  Extends to the backend for consistency, better refactoring, and clearer APIs.
 
-- Align with modern web standards (Next.js, React, TypeScript).
-- Provide a clear, file-based project structure for rapid onboarding.
-- Offer built-in support for server-side rendering, API routes, and static assets.
-- Emphasize security through password hashing, session management, and safe defaults.
-- Enable easy scaling and future enhancements via modular code and optional integrations.
+How these pieces fit together:
+1. The user signs up via better-auth—Next.js stores their credentials and creates a user record in PostgreSQL.  
+2. Protected API routes use better-auth to verify identity before allowing actions.  
+3. Drizzle ORM queries or updates PostgreSQL for tenant setup, website data, and subscription status.  
+4. API endpoints trigger AWS logic or payment webhooks to complete tasks.
 
-This stack strikes a balance between simplicity for newcomers and flexibility for experienced teams. It accelerates development of a secure authentication flow and a polished dashboard, while leaving room to plug in databases, test suites, and advanced features as the project grows.
+## Infrastructure and Deployment
+
+Our choices here ensure the app is reliable, scalable, and easy to update:
+
+- **Docker & Docker Compose**  
+  Standardize the local development environment (Next.js app + PostgreSQL). New developers can get started with a single command.
+
+- **Vercel**  
+  A cloud platform tailor-made for Next.js. It handles builds, serverless functions, and global CDN distribution automatically.
+
+- **Git & GitHub**  
+  Version control and collaboration. Branch-based workflows keep new features and fixes organized.
+
+- **CI/CD Pipelines (e.g., GitHub Actions)**  
+  Automated testing and deployments. Every push can trigger unit tests, end-to-end checks, and deploy to a preview or production environment.
+
+- **Configuration as Code**  
+  ESLint, Prettier, and TypeScript configs enforce consistent style and catch errors before they reach production.
+
+Benefits:
+- Consistent environments across teams with Docker.  
+- Fast global delivery via Vercel’s CDN.  
+- Safe, automated deployments through CI/CD.  
+- Tracking every change with Git.
+
+## Third-Party Integrations
+
+We connect to several services that extend our feature set:
+
+- **AWS SDK**  
+  - **S3** for storing generated website files per tenant.  
+  - **Route 53** for automating subdomain DNS setup (e.g., `tenant.yourplatform.com`).
+
+- **Flutterwave SDK**  
+  Handles payment checkout on the frontend and webhook verification on the backend. It manages subscriptions and billing status.
+
+- **LLM Providers**  
+  A pluggable interface (`LLMProvider`) with adapters for services like DeepSeek or KimiK2. Onboarding data goes to the AI to generate HTML/CSS/JS.
+
+- **Testing Libraries**  
+  - **Jest & React Testing Library** for unit and integration tests.  
+  - **Playwright or Cypress** for end-to-end user-flow testing (sign-up → onboarding → payment → site generation).
+
+These integrations let us:
+- Automate infrastructure tasks (DNS, storage).  
+- Process secure payments seamlessly.  
+- Generate content with AI in a modular, swappable way.  
+- Validate critical paths before releasing features.
+
+## Security and Performance Considerations
+
+We’ve built safeguards and optimizations to protect users and ensure speed:
+
+- **Authentication & Authorization**  
+  better-auth locks down pages and API routes. We check tokens on every request.
+
+- **Input Validation & Sanitization**  
+  react-hook-form on the frontend and server-side checks on APIs prevent bad data and injections.
+
+- **Secure AWS Configurations**  
+  S3 buckets are private by default; presigned URLs grant temporary, controlled access. Route 53 calls are done with least-privilege IAM roles.
+
+- **Webhook Verification**  
+  Flutterwave webhooks are validated using secret keys, ensuring we only process genuine payment events.
+
+- **Error Handling**  
+  Centralized try/catch wrappers on serverless functions. We return clear, user-friendly error messages and log details for debugging.
+
+- **Performance Optimizations**  
+  - **Server-side rendering (SSR)** for initial page loads, improving SEO and perceived speed.  
+  - **Static site generation (SSG)** where possible (e.g., marketing pages).  
+  - **Code splitting & lazy loading** large components only when needed.  
+  - **CDN caching** via Vercel for static assets.
+
+## Conclusion and Overall Tech Stack Summary
+
+This platform’s tech stack is designed to:
+
+- Deliver a **fast, polished user interface** with Next.js, React, Tailwind, and shadcn/ui.  
+- Provide **secure, scalable data handling** using Next.js API routes, better-auth, PostgreSQL, and Drizzle ORM.  
+- Ensure **reliable deployment** through Docker, Vercel, Git, and CI/CD pipelines.  
+- Leverage **powerful third-party services**: AWS for storage and DNS, Flutterwave for payments, and AI models for content generation.  
+- Maintain **high security and performance** with modern authentication, input validation, error handling, and CDN strategies.
+
+Unique aspects:
+- A **pluggable AI provider** interface that makes it easy to add or swap language models.  
+- **Automated tenant provisioning** including DNS setup in one step.  
+- A **component-driven design** that accelerates building complex flows like multi-step onboarding.
+
+Together, these choices give us a flexible, robust foundation for any AI-driven, multi-tenant website platform.
