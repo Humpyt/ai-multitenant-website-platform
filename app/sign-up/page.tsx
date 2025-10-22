@@ -61,7 +61,8 @@ export default function SignUpPage() {
             if (result.error) {
                 setError(result.error.message || "Sign up failed");
             } else {
-                router.push("/dashboard");
+                // Redirect to onboarding wizard after successful sign-up
+                router.push("/onboarding");
             }
         } catch (err) {
             setError("An unexpected error occurred");

@@ -1,14 +1,1 @@
-flowchart TD
-  Start[Landing Page]
-  SignUpPage[Sign Up Page]
-  SignInPage[Sign In Page]
-  AuthAPI[Authentication API Endpoint]
-  DashboardPage[Dashboard Page]
-  Start -->|Select Sign Up| SignUpPage
-  Start -->|Select Sign In| SignInPage
-  SignUpPage -->|Submit Credentials| AuthAPI
-  SignInPage -->|Submit Credentials| AuthAPI
-  AuthAPI -->|Success| DashboardPage
-  AuthAPI -->|Error| SignUpPage
-  AuthAPI -->|Error| SignInPage
-  DashboardPage -->|Click Logout| Start
+flowchart TD\n    Start[ Landing Page ] --> SignIn[ Sign Up Sign In ]\n    SignIn --> Dashboard[ Protected Dashboard ]\n    Dashboard --> ViewSites[ View Tenant Sites ]\n    ViewSites --> NewSite[ Create New Tenant ]\n    ViewSites --> ExistingSite[ Select Existing Site ]\n    NewSite --> Onboarding[ BusinessSetupWizard ]\n    Onboarding --> SubmitData[ Submit Onboarding Data ]\n    SubmitData --> AIGen[ Trigger AI Generation ]\n    AIGen --> StoreS3[ Store Site in S3 ]\n    StoreS3 --> Dashboard\n    ExistingSite --> Editor[ Site Editor ]\n    Editor --> FetchS3[ Fetch Site from S3 ]\n    FetchS3 --> EditSave[ Edit and Save Changes ]\n    EditSave --> StoreS3\n    Dashboard --> Payments[ Billing and Payments ]\n    Payments --> Flutterwave[ Process Payment via Flutterwave ]\n    Flutterwave --> UpdateStatus[ Update Tenant Status ]\n    UpdateStatus --> Dashboard\n    Dashboard --> Logout[ Logout ]
